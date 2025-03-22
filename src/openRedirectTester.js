@@ -4,35 +4,38 @@ const path = require('path');
 
 /* 🌈 Cores ANSI para formatação no terminal */
 const textColors = {
-  yellow: '\x1b[33m',    // Cores de alerta
-  cyan: '\x1b[36m',      // Cores de informação
-  green: '\x1b[32m',     // Cores de sucesso
-  red: '\x1b[31m',       // Cores de erro
-  magenta: '\x1b[35m',   // Cores de destaque
-  reset: '\x1b[0m',      // Resetar formatação
+  yellow: '\x1b[33m',
+  cyan: '\x1b[36m',
+  green: '\x1b[32m',
+  red: '\x1b[31m',
+  magenta: '\x1b[35m',
+  reset: '\x1b[0m',
 };
 
 /* 🌐 Configurações principais */
 const TEST_CONFIG = {
   baseUrl: 'https://exemplo.com',
-  targetUrls: ['http://google.com', 'https://google.com', 'google.com'], // Lista de URLs alvo
-  testParams: [], // Inicialmente vazio, será preenchido com a wordlist
-  delayBetweenRequests: 1000, // Delay de 1 segundo entre requisições
-  maxRetries: 3, // Número máximo de tentativas em caso de erro
-  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' // User-Agent personalizado
+  targetUrls: ['http://google.com', 'https://google.com', 'google.com'],
+  testParams: [],
+  delayBetweenRequests: 1000,
+  maxRetries: 3,
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 };
 
-/* 📊 Resultados dos testes */
+/* 📊 Resultados e relatório */
 const TEST_RESULTS = {
   totalDetected: 0,
-  testedUrls: 0
+  testedUrls: 0,
+  failedRequests: 0,
+  reportContent: []
 };
 
-/**
- * 📖 Carrega a wordlist de um arquivo .txt
- * @param {string} filePath - Caminho do arquivo .txt
- * @returns {Promise<string[]>} - Lista de parâmetros
- */
+function encodeUrlWithDots(url) {
+  return encodeURIComponent(url)
+    .replace(/\./g, '%2E')
+    .replace(/%20/g, '+');
+}
+
 async function loadWordlist(filePath) {
   try {
     const data = await fs.promises.readFile(filePath, 'utf-8');
@@ -43,132 +46,141 @@ async function loadWordlist(filePath) {
   }
 }
 
-/**
- * 🕒 Aguarda um tempo específico
- * @param {number} ms - Tempo em milissegundos
- * @returns {Promise<void>}
- */
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * 🧪 Verifica se a URL final após o redirecionamento corresponde ao destino esperado
- * @param {string} url - URL para seguir redirecionamentos
- * @param {string} targetUrl - URL alvo esperada
- * @returns {Promise<boolean>} - Retorna `true` se o redirecionamento final for para o destino esperado
- */
-async function isFinalRedirectToTarget(url, targetUrl) {
-  try {
-    const response = await axios.get(url, {
-      maxRedirects: 10, // Segue até 10 redirecionamentos
-      validateStatus: () => true, // Aceita todos os status codes
-      headers: {
-        'User-Agent': TEST_CONFIG.userAgent // Adiciona um User-Agent personalizado
-      }
-    });
-
-    // Verifica se a URL final corresponde ao destino esperado
-    const finalUrl = response.request.res.responseUrl || response.config.url;
-    return finalUrl.includes(targetUrl);
-  } catch (error) {
-    return false; // Ignora erros de requisição
-  }
+function calculateEstimatedTime(totalRequests, delay) {
+  const totalTimeMs = totalRequests * delay;
+  const minutes = Math.floor(totalTimeMs / 60000);
+  const seconds = Math.floor((totalTimeMs % 60000) / 1000);
+  return `${minutes > 0 ? `${minutes}min ` : ''}${seconds}s`;
 }
 
-/**
- * 🧪 Executa um teste de redirecionamento para um parâmetro específico
- * @param {string} param - Parâmetro de query a ser testado
- * @param {boolean} [encoded=false] - Deve usar URL codificada?
- * @param {string} targetUrl - URL alvo para redirecionamento
- * @param {number} retryCount - Número de tentativas restantes
- * @returns {Promise<void>}
- */
-async function testRedirectParameter(param, encoded = false, targetUrl, retryCount = TEST_CONFIG.maxRetries) {
-  const encodedUrl = encoded 
-    ? encodeURIComponent(targetUrl)
-    : targetUrl;
-
+async function testRedirectParameter(param, targetUrl, encoded = false) {
+  const encodedUrl = encoded ? encodeUrlWithDots(targetUrl) : targetUrl;
   const testUrl = `${TEST_CONFIG.baseUrl}?${param}=${encodedUrl}`;
   TEST_RESULTS.testedUrls++;
 
-  try {
-    const response = await axios.get(testUrl, {
-      maxRedirects: 0, // Impede seguimento automático de redirecionamentos
-      validateStatus: status => status >= 200 && status < 400,
-      headers: {
-        'User-Agent': TEST_CONFIG.userAgent // Adiciona um User-Agent personalizado
-      }
-    });
+  let retries = TEST_CONFIG.maxRetries;
+  while (retries > 0) {
+    try {
+      const response = await axios.get(testUrl, {
+        maxRedirects: 0,
+        validateStatus: status => status >= 200 && status < 400,
+        headers: {
+          'User-Agent': TEST_CONFIG.userAgent,
+          'Accept-Encoding': 'gzip, deflate'
+        }
+      });
 
-    // 🔍 Verifica se é um redirecionamento válido (3xx)
-    if (response.status >= 300) {
-      const isFinalRedirectValid = await isFinalRedirectToTarget(testUrl, targetUrl);
+      if (response.status >= 300 && response.status < 400) {
+        const decodedLocation = decodeURIComponent(response.headers.location);
+        const isExactMatch = decodedLocation === targetUrl;
 
-      if (isFinalRedirectValid) {
-        console.log([
-          `${textColors.yellow}🟢 Redirecionamento VULNERÁVEL detectado!`,
-          `📌 Parâmetro: ${textColors.magenta}${param}${encoded ? ' (encoded)' : ''}`,
-          `📍 Destino: ${textColors.cyan}${targetUrl}`,
-          `🔗 URL Testada: ${textColors.cyan}${TEST_CONFIG.baseUrl}?${param}=${encoded ? encodeURIComponent(targetUrl) : targetUrl}${textColors.reset}`
-        ].join('\n') + '\n');
-        
-        TEST_RESULTS.totalDetected++;
+        if (isExactMatch) {
+          // Mensagem colorida para o terminal
+          console.log([
+            `${textColors.yellow}🟢 Redirecionamento VULNERÁVEL detectado!${textColors.reset}`,
+            `📌 ${textColors.magenta}Parâmetro: ${param}${encoded ? ' (encoded)' : ''}${textColors.reset}`,
+            `📍 ${textColors.cyan}Destino: ${decodedLocation}${textColors.reset}`,
+            `🔗 ${textColors.cyan}URL Testada: ${testUrl}${textColors.reset}\n`
+          ].join('\n'));
+
+          // Versão sem cores para o relatório
+          TEST_RESULTS.reportContent.push(
+            `🟢 VULNERABILIDADE: ${param}${encoded ? ' (encoded)' : ''}`,
+            `📍 Destino: ${decodedLocation}`,
+            `🔗 Testado em: ${testUrl}\n`
+          );
+
+          TEST_RESULTS.totalDetected++;
+        }
       }
-    }
-  } catch (error) {
-    if (error.response && error.response.status === 429) {
-      // Erro 429: Too Many Requests (Rate Limit)
-      console.log(`${textColors.red}⚠️  Rate limit atingido. Aguardando antes de tentar novamente...${textColors.reset}`);
-      await sleep(5000); // Aguarda 5 segundos antes de tentar novamente
-      if (retryCount > 0) {
-        await testRedirectParameter(param, encoded, targetUrl, retryCount - 1); // Tenta novamente
-      } else {
-        console.log(`${textColors.red}❌ Número máximo de tentativas atingido para: ${testUrl}${textColors.reset}`);
-      }
-    } else {
-      // Outros erros são ignorados
+      break;
+    } catch (error) {
+      retries--;
+      if (retries === 0) TEST_RESULTS.failedRequests++;
+      await sleep(TEST_CONFIG.delayBetweenRequests);
     }
   }
 }
 
-/**
- * 🚀 Executa a suíte de testes completa
- * @returns {Promise<void>}
- */
-async function runSecurityTests() {
-  // Carrega a wordlist
-  const wordlistPath = path.join(__dirname, 'params.txt'); // Ajuste o caminho conforme necessário
-  TEST_CONFIG.testParams = await loadWordlist(wordlistPath);
+async function generateReport() {
+  const report = [
+    '🔎 Teste de Open Redirect - Relatório Final',
+    `⏰ Data: ${new Date().toLocaleString()}`,
+    '-----------------------------------------------',
+    `🛡️ Parâmetros testados: ${TEST_CONFIG.testParams.length}`,
+    `🎯 URL alvo: ${TEST_CONFIG.baseUrl}`,
+    `🌐 Destinos: ${TEST_CONFIG.targetUrls.join(', ')}`,
+    '-----------------------------------------------\n',
+  ];
 
-  console.log(`${textColors.cyan}
-🔎 Iniciando teste de Open Redirect
-🛡️  Parâmetros testados: ${TEST_CONFIG.testParams.length}
-🌐 URLs Alvo: ${TEST_CONFIG.targetUrls.join(', ')}
-⏳ Aguarde...${textColors.reset}\n`);
-
-  // Executa testes sequenciais para cada URL alvo
-  for (const targetUrl of TEST_CONFIG.targetUrls) {
-    for (const param of TEST_CONFIG.testParams) {
-      await testRedirectParameter(param, false, targetUrl); // Versão não codificada
-      await testRedirectParameter(param, true, targetUrl);  // Versão codificada
-      await sleep(TEST_CONFIG.delayBetweenRequests); // Aguarda entre requisições
-    }
+  // Adiciona as vulnerabilidades detectadas
+  if (TEST_RESULTS.reportContent.length > 0) {
+    report.push(...TEST_RESULTS.reportContent);
+  } else {
+    report.push('🔴 Nenhuma vulnerabilidade de open redirect encontrada!\n');
   }
 
-  // 🎯 Resultado final
+  // Adiciona as estatísticas finais
+  report.push(
+    '\n📊 Estatísticas Finais:',
+    `🔄 URLs testadas: ${TEST_RESULTS.testedUrls}`,
+    `✅ Redirecionamentos detectados: ${TEST_RESULTS.totalDetected}`,
+    `❌ Requisições falhas: ${TEST_RESULTS.failedRequests}\n`,
+    TEST_RESULTS.totalDetected > 0
+      ? '⚠️  Vulnerabilidades requerem atenção imediata!'
+      : '✅ Nenhuma vulnerabilidade encontrada!'
+  );
+
+  return report.join('\n');
+}
+
+async function runSecurityTests() {
+  const wordlistPath = path.join(__dirname, 'params.txt');
+  TEST_CONFIG.testParams = await loadWordlist(wordlistPath);
+
+  const totalRequests = TEST_CONFIG.testParams.length * TEST_CONFIG.targetUrls.length * 2;
+  const estimatedTime = calculateEstimatedTime(totalRequests, TEST_CONFIG.delayBetweenRequests);
+
+  // Cabeçalho inicial
+  console.log(`${textColors.cyan}
+🔎 Iniciando teste de Open Redirect
+🛡️  Parâmetros: ${TEST_CONFIG.testParams.length}
+🎯 URL alvo: ${TEST_CONFIG.baseUrl}
+🌐 Destinos: ${TEST_CONFIG.targetUrls.join(', ')}
+⏳ Aguarde (tempo estimado: ${estimatedTime})...${textColors.reset}\n`);
+
+  // Execução dos testes
+  for (const param of TEST_CONFIG.testParams) {
+    await Promise.all(TEST_CONFIG.targetUrls.map(async (targetUrl) => {
+      await testRedirectParameter(param, targetUrl, false);
+      await sleep(TEST_CONFIG.delayBetweenRequests);
+      await testRedirectParameter(param, targetUrl, true);
+      await sleep(TEST_CONFIG.delayBetweenRequests);
+    }));
+  }
+
+  // Resultado final no terminal
   console.log(`${textColors.green}
 📊 Relatório Final:
 🔄 URLs testadas: ${TEST_RESULTS.testedUrls}
-✅ Redirecionamentos detectados: ${TEST_RESULTS.totalDetected}${textColors.reset}`);
+✅ Redirecionamentos detectados: ${TEST_RESULTS.totalDetected}
+❌ Requisições falhas: ${TEST_RESULTS.failedRequests}${textColors.reset}`);
 
-  // Exibe alerta se nenhuma vulnerabilidade foi encontrada
   if (TEST_RESULTS.totalDetected === 0) {
     console.log(`\n${textColors.red}🔴 Nenhuma vulnerabilidade de open redirect encontrada!${textColors.reset}`);
-  } else {
-    console.log(`${textColors.yellow}\n⚠️  Atenção: Vulnerabilidades requerem correção imediata!${textColors.reset}`);
   }
+
+  // Gera arquivo de relatório
+  fs.writeFileSync(
+    path.join(__dirname, 'report.txt'),
+    await generateReport(),
+    'utf-8'
+  );
+  console.log(`\n${textColors.cyan}📄 Relatório salvo em: ${path.resolve(__dirname, 'report.txt')}${textColors.reset}`);
 }
 
-// ⚡ Inicia a execução dos testes
 runSecurityTests();
