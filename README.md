@@ -62,7 +62,7 @@ npm start
 
 ### 💡 Adicionais
 
-1. Caso você queira alterar o site alvo (baseUrl), edite o arquivo `openRedirectTester.js`, localizado em [src/openRedirectTester.js](src/openRedirectTester.js).
+1. Caso queira alterar o site alvo (baseUrl), edite o arquivo `openRedirectTester.js`, localizado em [src/openRedirectTester.js](src/openRedirectTester.js).
 2. Se desejar testar com uma wordlist personalizada, edite o arquivo `params.txt`, localizado em [src/params.txt](src/params.txt), e adicione os parâmetros que deseja testar.
 
 ---
