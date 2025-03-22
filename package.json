@@ -1,0 +1,16 @@
+{
+  "name": "open-redirect-tester",
+  "version": "1.0.0",
+  "main": "src/openRedirectTester.js",
+  "scripts": {
+    "start": "node src/openRedirectTester.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.8.4"
+  }
+}
