@@ -15,8 +15,11 @@ const textColors = {
 /* 🌐 Configurações principais */
 const TEST_CONFIG = {
   baseUrl: 'https://exemplo.com',
-  targetUrl: 'https://google.com',
-  testParams: [] // Inicialmente vazio, será preenchido com a wordlist
+  targetUrls: ['http://google.com', 'https://google.com', 'google.com'], // Lista de URLs alvo
+  testParams: [], // Inicialmente vazio, será preenchido com a wordlist
+  delayBetweenRequests: 1000, // Delay de 1 segundo entre requisições
+  maxRetries: 3, // Número máximo de tentativas em caso de erro
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' // User-Agent personalizado
 };
 
 /* 📊 Resultados dos testes */
@@ -41,15 +44,50 @@ async function loadWordlist(filePath) {
 }
 
 /**
+ * 🕒 Aguarda um tempo específico
+ * @param {number} ms - Tempo em milissegundos
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * 🧪 Verifica se a URL final após o redirecionamento corresponde ao destino esperado
+ * @param {string} url - URL para seguir redirecionamentos
+ * @param {string} targetUrl - URL alvo esperada
+ * @returns {Promise<boolean>} - Retorna `true` se o redirecionamento final for para o destino esperado
+ */
+async function isFinalRedirectToTarget(url, targetUrl) {
+  try {
+    const response = await axios.get(url, {
+      maxRedirects: 10, // Segue até 10 redirecionamentos
+      validateStatus: () => true, // Aceita todos os status codes
+      headers: {
+        'User-Agent': TEST_CONFIG.userAgent // Adiciona um User-Agent personalizado
+      }
+    });
+
+    // Verifica se a URL final corresponde ao destino esperado
+    const finalUrl = response.request.res.responseUrl || response.config.url;
+    return finalUrl.includes(targetUrl);
+  } catch (error) {
+    return false; // Ignora erros de requisição
+  }
+}
+
+/**
  * 🧪 Executa um teste de redirecionamento para um parâmetro específico
  * @param {string} param - Parâmetro de query a ser testado
  * @param {boolean} [encoded=false] - Deve usar URL codificada?
+ * @param {string} targetUrl - URL alvo para redirecionamento
+ * @param {number} retryCount - Número de tentativas restantes
  * @returns {Promise<void>}
  */
-async function testRedirectParameter(param, encoded = false) {
+async function testRedirectParameter(param, encoded = false, targetUrl, retryCount = TEST_CONFIG.maxRetries) {
   const encodedUrl = encoded 
-    ? encodeURIComponent(TEST_CONFIG.targetUrl)
-    : TEST_CONFIG.targetUrl;
+    ? encodeURIComponent(targetUrl)
+    : targetUrl;
 
   const testUrl = `${TEST_CONFIG.baseUrl}?${param}=${encodedUrl}`;
   TEST_RESULTS.testedUrls++;
@@ -57,26 +95,40 @@ async function testRedirectParameter(param, encoded = false) {
   try {
     const response = await axios.get(testUrl, {
       maxRedirects: 0, // Impede seguimento automático de redirecionamentos
-      validateStatus: status => status >= 200 && status < 400
+      validateStatus: status => status >= 200 && status < 400,
+      headers: {
+        'User-Agent': TEST_CONFIG.userAgent // Adiciona um User-Agent personalizado
+      }
     });
 
     // 🔍 Verifica se é um redirecionamento válido (3xx)
     if (response.status >= 300) {
-      const isExactMatch = response.headers.location === TEST_CONFIG.targetUrl;
-      
-      if (isExactMatch) {
+      const isFinalRedirectValid = await isFinalRedirectToTarget(testUrl, targetUrl);
+
+      if (isFinalRedirectValid) {
         console.log([
           `${textColors.yellow}🟢 Redirecionamento VULNERÁVEL detectado!`,
           `📌 Parâmetro: ${textColors.magenta}${param}${encoded ? ' (encoded)' : ''}`,
-          `📍 Destino: ${textColors.cyan}${response.headers.location}`,
-          `🔗 URL Testada: ${textColors.cyan}${testUrl}${textColors.reset}`
+          `📍 Destino: ${textColors.cyan}${targetUrl}`,
+          `🔗 URL Testada: ${textColors.cyan}${TEST_CONFIG.baseUrl}?${param}=${encoded ? encodeURIComponent(targetUrl) : targetUrl}${textColors.reset}`
         ].join('\n') + '\n');
         
         TEST_RESULTS.totalDetected++;
       }
     }
   } catch (error) {
-    // Ignora erros de requisição intencionais
+    if (error.response && error.response.status === 429) {
+      // Erro 429: Too Many Requests (Rate Limit)
+      console.log(`${textColors.red}⚠️  Rate limit atingido. Aguardando antes de tentar novamente...${textColors.reset}`);
+      await sleep(5000); // Aguarda 5 segundos antes de tentar novamente
+      if (retryCount > 0) {
+        await testRedirectParameter(param, encoded, targetUrl, retryCount - 1); // Tenta novamente
+      } else {
+        console.log(`${textColors.red}❌ Número máximo de tentativas atingido para: ${testUrl}${textColors.reset}`);
+      }
+    } else {
+      // Outros erros são ignorados
+    }
   }
 }
 
@@ -92,13 +144,16 @@ async function runSecurityTests() {
   console.log(`${textColors.cyan}
 🔎 Iniciando teste de Open Redirect
 🛡️  Parâmetros testados: ${TEST_CONFIG.testParams.length}
-🌐 URL Alvo: ${TEST_CONFIG.targetUrl}
+🌐 URLs Alvo: ${TEST_CONFIG.targetUrls.join(', ')}
 ⏳ Aguarde...${textColors.reset}\n`);
 
-  // Executa testes sequenciais
-  for (const param of TEST_CONFIG.testParams) {
-    await testRedirectParameter(param, false); // Versão não codificada
-    await testRedirectParameter(param, true);  // Versão codificada
+  // Executa testes sequenciais para cada URL alvo
+  for (const targetUrl of TEST_CONFIG.targetUrls) {
+    for (const param of TEST_CONFIG.testParams) {
+      await testRedirectParameter(param, false, targetUrl); // Versão não codificada
+      await testRedirectParameter(param, true, targetUrl);  // Versão codificada
+      await sleep(TEST_CONFIG.delayBetweenRequests); // Aguarda entre requisições
+    }
   }
 
   // 🎯 Resultado final
