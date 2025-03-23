@@ -79,22 +79,33 @@ async function testRedirectParameter(param, targetUrl, encoded = false) {
         const isExactMatch = decodedLocation === targetUrl;
 
         if (isExactMatch) {
-          // Mensagem colorida para o terminal
-          console.log([
-            `${textColors.yellow}🟢 Redirecionamento VULNERÁVEL detectado!${textColors.reset}`,
-            `📌 ${textColors.magenta}Parâmetro: ${param}${encoded ? ' (encoded)' : ''}${textColors.reset}`,
-            `📍 ${textColors.cyan}Destino: ${decodedLocation}${textColors.reset}`,
-            `🔗 ${textColors.cyan}URL Testada: ${testUrl}${textColors.reset}\n`
-          ].join('\n'));
+          // Verifica se a URL de destino retorna 200 OK
+          const destinationResponse = await axios.get(decodedLocation, {
+            validateStatus: status => status === 200,
+            headers: {
+              'User-Agent': TEST_CONFIG.userAgent,
+              'Accept-Encoding': 'gzip, deflate'
+            }
+          });
 
-          // Versão sem cores para o relatório
-          TEST_RESULTS.reportContent.push(
-            `🟢 VULNERABILIDADE: ${param}${encoded ? ' (encoded)' : ''}`,
-            `📍 Destino: ${decodedLocation}`,
-            `🔗 Testado em: ${testUrl}\n`
-          );
+          if (destinationResponse.status === 200) {
+            // Mensagem colorida para o terminal
+            console.log([
+              `${textColors.yellow}🟢 Redirecionamento VULNERÁVEL detectado!${textColors.reset}`,
+              `📌 ${textColors.magenta}Parâmetro: ${param}${encoded ? ' (encoded)' : ''}${textColors.reset}`,
+              `📍 ${textColors.cyan}Destino: ${decodedLocation}${textColors.reset}`,
+              `🔗 ${textColors.cyan}URL Testada: ${testUrl}${textColors.reset}\n`
+            ].join('\n'));
 
-          TEST_RESULTS.totalDetected++;
+            // Versão sem cores para o relatório
+            TEST_RESULTS.reportContent.push(
+              `🟢 VULNERABILIDADE: ${param}${encoded ? ' (encoded)' : ''}`,
+              `📍 Destino: ${decodedLocation}`,
+              `🔗 Testado em: ${testUrl}\n`
+            );
+
+            TEST_RESULTS.totalDetected++;
+          }
         }
       }
       break;
