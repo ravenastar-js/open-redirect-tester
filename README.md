@@ -42,11 +42,11 @@ O script realiza uma série de testes automatizados em um endpoint específico, 
    ```
    Ou, se preferir, faça o download manual do repositório.
 
-2. Instale as dependências: Execute o arquivo `install.bat` em (executar/install.bat)[executar/install.bat]
+2. Instale as dependências: Execute o arquivo `install.bat` em [executar/install.bat](executar/install.bat).
 
 ### Execução
 
-Execute o arquivo `run.bat` em (executar/run.bat)[executar/run.bat]
+Execute o arquivo `run.bat` em [executar/run.bat](executar/run.bat).
 
 ---
 
