@@ -42,28 +42,18 @@ O script realiza uma série de testes automatizados em um endpoint específico, 
    ```
    Ou, se preferir, faça o download manual do repositório.
 
-2. Acesse a pasta do projeto:
-   ```bash
-   cd open-redirect-tester
-   ```
-
-3. Instale as dependências:
-   ```bash
-   npm install
-   ```
+2. Instale as dependências: Execute o arquivo `install.bat` em (executar/install.bat)[executar/install.bat]
 
 ### Execução
 
-Execute o script com o seguinte comando:
-```bash
-npm start
-```
+Execute o arquivo `run.bat` em (executar/run.bat)[executar/run.bat]
+
 ---
 
 ### 💡 Adicionais
 
-1. Caso queira alterar o site alvo (baseUrl), edite o arquivo `openRedirectTester.js`, localizado em [src/openRedirectTester.js](src/openRedirectTester.js).
-2. Se desejar testar com uma wordlist personalizada, edite o arquivo `params.txt`, localizado em [src/params.txt](src/params.txt), e adicione os parâmetros que deseja testar.
+1. Caso queira alterar o site alvo, edite o arquivo `alvo.txt`, localizado em [target/alvo.txt](target/alvo.txt).
+2. Se desejar testar parâmetros personalizados, edite o arquivo `params.txt`, localizado em [target/params.txt](target/params.txt), e adicione os parâmetros que deseja testar.
 
 ---
 

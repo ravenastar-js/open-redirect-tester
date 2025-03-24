@@ -1,28 +1,62 @@
+/**
+ * 🕵️ Módulo para testar vulnerabilidades de Open Redirect em URLs
+ * @module OpenRedirectTester
+ * @requires axios
+ * @requires fs
+ * @requires path
+ */
+
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-/* 🌈 Cores ANSI para formatação no terminal */
+/**
+ * 🎨 Códigos de cores ANSI para formatação no terminal
+ * @namespace textColors
+ */
 const textColors = {
-  yellow: '\x1b[33m',
-  cyan: '\x1b[36m',
-  green: '\x1b[32m',
-  red: '\x1b[31m',
-  magenta: '\x1b[35m',
-  reset: '\x1b[0m',
+  yellow: '\x1b[33m',  // 🌕 Amarelo
+  cyan: '\x1b[36m',    // 💧 Ciano
+  green: '\x1b[32m',   // 🍀 Verde
+  red: '\x1b[31m',     // ❤️ Vermelho
+  reset: '\x1b[0m',    // 🔄 Resetar
 };
 
-/* 🌐 Configurações principais */
+/**
+ * ⚙️ Configurações globais do teste
+ * @typedef {Object} TestConfig
+ * @property {string} baseUrl - 🎯 URL alvo
+ * @property {string[]} targetUrls - 🌍 URLs de destino
+ * @property {string[]} testParams - 🛡️ Parâmetros testados
+ * @property {number} delayBetweenRequests - ⏳ Delay entre requests (ms)
+ * @property {number} maxRetries - 🔄 Máximo de retentativas
+ * @property {string} userAgent - 🤖 User-Agent das requisições
+ */
+
+/**
+ * @type {TestConfig}
+ */
 const TEST_CONFIG = {
-  baseUrl: 'https://exemplo.com',
-  targetUrls: ['http://google.com', 'https://google.com', 'google.com'],
-  testParams: [],
-  delayBetweenRequests: 1000,
-  maxRetries: 3,
+  baseUrl: '', // 📁 Será carregado de target/alvo.txt
+  targetUrls: [], // 📂 Será carregado de target/destinos.txt
+  testParams: [], // 📜 Será carregado de target/params.txt
+  delayBetweenRequests: 1000, // ⏱️ 1 segundo
+  maxRetries: 3, // ♻️ 3 tentativas
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 };
 
-/* 📊 Resultados e relatório */
+/**
+ * 📊 Resultados acumulados dos testes
+ * @typedef {Object} TestResults
+ * @property {number} totalDetected - ✅ Vulnerabilidades encontradas
+ * @property {number} testedUrls - 🔄 URLs testadas
+ * @property {number} failedRequests - ❌ Requisições falhas
+ * @property {string[]} reportContent - 📝 Conteúdo do relatório
+ */
+
+/**
+ * @type {TestResults}
+ */
 const TEST_RESULTS = {
   totalDetected: 0,
   testedUrls: 0,
@@ -30,26 +64,82 @@ const TEST_RESULTS = {
   reportContent: []
 };
 
-function encodeUrlWithDots(url) {
-  return encodeURIComponent(url)
-    .replace(/\./g, '%2E')
-    .replace(/%20/g, '+');
-}
-
-async function loadWordlist(filePath) {
+/**
+ * 📥 Carrega configurações dos arquivos na pasta target
+ * @async
+ * @function loadConfigFromFiles
+ * @throws {Error} Se arquivos não existirem ou estiverem vazios
+ */
+async function loadConfigFromFiles() {
   try {
-    const data = await fs.promises.readFile(filePath, 'utf-8');
-    return data.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    // 1️⃣ Carrega URL alvo
+    const baseUrlPath = path.join(__dirname, '../target/alvo.txt');
+    TEST_CONFIG.baseUrl = (await fs.promises.readFile(baseUrlPath, 'utf-8')).trim();
+
+    if (!TEST_CONFIG.baseUrl) throw new Error('📭 Arquivo alvo.txt vazio');
+
+    // 2️⃣ Carrega URLs de destino
+    const destinosPath = path.join(__dirname, '../target/destinos.txt');
+    TEST_CONFIG.targetUrls = (await fs.promises.readFile(destinosPath, 'utf-8'))
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    if (TEST_CONFIG.targetUrls.length === 0) {
+      throw new Error('📭 Nenhum destino válido em destinos.txt');
+    }
   } catch (error) {
-    console.error(`${textColors.red}❌ Erro ao carregar a wordlist: ${error.message}${textColors.reset}`);
+    console.error(`${textColors.red}❌ Erro: ${error.message}${textColors.reset}`);
     process.exit(1);
   }
 }
 
+/**
+ * 🔤 Codifica URL substituindo pontos por %2E
+ * @function encodeUrlWithDots
+ * @param {string} url - 🌐 URL original
+ * @returns {string} 🔗 URL codificada
+ */
+function encodeUrlWithDots(url) {
+  return encodeURIComponent(url)
+    .replace(/\./g, '%2E')  // 🔄 Substitui pontos
+    .replace(/%20/g, '+');  // 🔄 Substitui espaços
+}
+
+/**
+ * 📖 Carrega wordlist de parâmetros
+ * @async
+ * @function loadWordlist
+ * @param {string} filePath - 📂 Caminho do arquivo
+ * @returns {Promise<string[]>} 🛡️ Lista de parâmetros
+ */
+async function loadWordlist(filePath) {
+  try {
+    const data = await fs.promises.readFile(filePath, 'utf-8');
+    return data.split('\n').map(line => line.trim()).filter(Boolean);
+  } catch (error) {
+    console.error(`${textColors.red}❌ Falha ao carregar wordlist: ${error.message}${textColors.reset}`);
+    process.exit(1);
+  }
+}
+
+/**
+ * 💤 Cria uma pausa assíncrona
+ * @function sleep
+ * @param {number} ms - ⏳ Milissegundos
+ * @returns {Promise<void>}
+ */
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * ⏰ Calcula tempo estimado de execução
+ * @function calculateEstimatedTime
+ * @param {number} totalRequests - 🔢 Total de requisições
+ * @param {number} delay - ⏳ Delay entre requisições
+ * @returns {string} 🕒 Tempo formatado
+ */
 function calculateEstimatedTime(totalRequests, delay) {
   const totalTimeMs = totalRequests * delay;
   const minutes = Math.floor(totalTimeMs / 60000);
@@ -57,51 +147,50 @@ function calculateEstimatedTime(totalRequests, delay) {
   return `${minutes > 0 ? `${minutes}min ` : ''}${seconds}s`;
 }
 
+/**
+ * 🧪 Testa um parâmetro para open redirect
+ * @async
+ * @function testRedirectParameter
+ * @param {string} param - 🛡️ Parâmetro testado
+ * @param {string} targetUrl - 🌍 URL de destino
+ * @param {boolean} [encoded=false] - 🔤 URL codificada?
+ */
 async function testRedirectParameter(param, targetUrl, encoded = false) {
-  const encodedUrl = encoded ? encodeUrlWithDots(targetUrl) : targetUrl;
-  const testUrl = `${TEST_CONFIG.baseUrl}?${param}=${encodedUrl}`;
+  const testUrl = `${TEST_CONFIG.baseUrl}?${param}=${encoded ? encodeUrlWithDots(targetUrl) : targetUrl
+    }`;
   TEST_RESULTS.testedUrls++;
 
   let retries = TEST_CONFIG.maxRetries;
   while (retries > 0) {
     try {
       const response = await axios.get(testUrl, {
-        maxRedirects: 0,
+        maxRedirects: 0, // 🚫 Sem redirecionamento
         validateStatus: status => status >= 200 && status < 400,
-        headers: {
-          'User-Agent': TEST_CONFIG.userAgent,
-          'Accept-Encoding': 'gzip, deflate'
-        }
+        headers: { 'User-Agent': TEST_CONFIG.userAgent }
       });
 
+      // 🔍 Detecta redirecionamento (status 3xx)
       if (response.status >= 300 && response.status < 400) {
         const decodedLocation = decodeURIComponent(response.headers.location);
-        const isExactMatch = decodedLocation === targetUrl;
 
-        if (isExactMatch) {
-          // Verifica se a URL de destino retorna 200 OK
+        if (decodedLocation === targetUrl) {
           const destinationResponse = await axios.get(decodedLocation, {
-            validateStatus: status => status === 200,
-            headers: {
-              'User-Agent': TEST_CONFIG.userAgent,
-              'Accept-Encoding': 'gzip, deflate'
-            }
+            validateStatus: status => status === 200
           });
 
           if (destinationResponse.status === 200) {
-            // Mensagem colorida para o terminal
+            // 🎨 Exibe resultado colorido
             console.log([
-              `${textColors.yellow}🟢 Redirecionamento VULNERÁVEL detectado!${textColors.reset}`,
-              `📌 ${textColors.magenta}Parâmetro: ${param}${encoded ? ' (encoded)' : ''}${textColors.reset}`,
-              `📍 ${textColors.cyan}Destino: ${decodedLocation}${textColors.reset}`,
-              `🔗 ${textColors.cyan}URL Testada: ${testUrl}${textColors.reset}\n`
+              `${textColors.yellow}⚠️ VULNERÁVEL: ${param}${encoded ? ' (encoded)' : ''}`,
+              `🔗 Testado em: ${testUrl}`,
+              `📍 Redireciona para: ${decodedLocation}\n`
             ].join('\n'));
 
-            // Versão sem cores para o relatório
+            // 📝 Adiciona ao relatório
             TEST_RESULTS.reportContent.push(
-              `🟢 VULNERABILIDADE: ${param}${encoded ? ' (encoded)' : ''}`,
-              `📍 Destino: ${decodedLocation}`,
-              `🔗 Testado em: ${testUrl}\n`
+              `⚠️ VULNERÁVEL: ${param}${encoded ? ' (encoded)' : ''}`,
+              `🔗 Testado em: ${testUrl}`,
+              `📍 Redireciona para: ${decodedLocation}\n`
             );
 
             TEST_RESULTS.totalDetected++;
@@ -117,54 +206,70 @@ async function testRedirectParameter(param, targetUrl, encoded = false) {
   }
 }
 
+/**
+ * 📝 Gera relatório final
+ * @async
+ * @function generateReport
+ * @returns {Promise<string>} 📄 Conteúdo do relatório
+ */
 async function generateReport() {
   const report = [
-    '🔎 Teste de Open Redirect - Relatório Final',
-    `⏰ Data: ${new Date().toLocaleString()}`,
-    '-----------------------------------------------',
-    `🛡️ Parâmetros testados: ${TEST_CONFIG.testParams.length}`,
-    `🎯 URL alvo: ${TEST_CONFIG.baseUrl}`,
+    '🔎 RELATÓRIO - Open Redirect Test',
+    `⏰ ${new Date().toLocaleString()}`,
+    '--------------------------------',
+    `🛡️ Parâmetros: ${TEST_CONFIG.testParams.length}`,
+    `🎯 Alvo: ${TEST_CONFIG.baseUrl}`,
     `🌐 Destinos: ${TEST_CONFIG.targetUrls.join(', ')}`,
-    '-----------------------------------------------\n',
+    '--------------------------------\n',
   ];
 
-  // Adiciona as vulnerabilidades detectadas
-  if (TEST_RESULTS.reportContent.length > 0) {
-    report.push(...TEST_RESULTS.reportContent);
-  } else {
-    report.push('🔴 Nenhuma vulnerabilidade de open redirect encontrada!\n');
-  }
+  // 📌 Adiciona resultados
+  report.push(...(
+    TEST_RESULTS.reportContent.length > 0
+      ? TEST_RESULTS.reportContent
+      : ['🟢 Nenhuma vulnerabilidade encontrada!\n']
+  ));
 
-  // Adiciona as estatísticas finais
+  // 📊 Adiciona estatísticas
   report.push(
-    '\n📊 Estatísticas Finais:',
-    `🔄 URLs testadas: ${TEST_RESULTS.testedUrls}`,
-    `✅ Redirecionamentos detectados: ${TEST_RESULTS.totalDetected}`,
-    `❌ Requisições falhas: ${TEST_RESULTS.failedRequests}\n`,
+    '\n📊 ESTATÍSTICAS:',
+    `🔢 URLs testadas: ${TEST_RESULTS.testedUrls}`,
+    `✅ Vulnerabilidades: ${TEST_RESULTS.totalDetected}`,
+    `❌ Falhas: ${TEST_RESULTS.failedRequests}\n`,
     TEST_RESULTS.totalDetected > 0
-      ? '⚠️  Vulnerabilidades requerem atenção imediata!'
-      : '✅ Nenhuma vulnerabilidade encontrada!'
+      ? '⚠️  Ação necessária!'
+      : '✅ Sistema seguro!'
   );
 
   return report.join('\n');
 }
 
+/**
+ * 🚀 Função principal que executa os testes
+ * @async
+ * @function runSecurityTests
+ */
 async function runSecurityTests() {
-  const wordlistPath = path.join(__dirname, 'params.txt');
-  TEST_CONFIG.testParams = await loadWordlist(wordlistPath);
-
-  const totalRequests = TEST_CONFIG.testParams.length * TEST_CONFIG.targetUrls.length * 2;
-  const estimatedTime = calculateEstimatedTime(totalRequests, TEST_CONFIG.delayBetweenRequests);
-
-  // Cabeçalho inicial
+  // 1️⃣ Inicialização
   console.log(`${textColors.cyan}
-🔎 Iniciando teste de Open Redirect
-🛡️  Parâmetros: ${TEST_CONFIG.testParams.length}
-🎯 URL alvo: ${TEST_CONFIG.baseUrl}
-🌐 Destinos: ${TEST_CONFIG.targetUrls.join(', ')}
-⏳ Aguarde (tempo estimado: ${estimatedTime})...${textColors.reset}\n`);
+🛡️  INICIANDO TESTE DE OPEN REDIRECT
+================================`);
 
-  // Execução dos testes
+  await loadConfigFromFiles();
+  TEST_CONFIG.testParams = await loadWordlist(path.join(__dirname, '../target/params.txt'));
+
+  // 2️⃣ Exibe configuração
+  const totalRequests = TEST_CONFIG.testParams.length * TEST_CONFIG.targetUrls.length * 2;
+  console.log(`
+🎯 ALVO: ${TEST_CONFIG.baseUrl}
+🌐 DESTINOS: ${TEST_CONFIG.targetUrls.length}
+🛡️ PARÂMETROS: ${TEST_CONFIG.testParams.length}
+⏳ TEMPO ESTIMADO: ${calculateEstimatedTime(totalRequests, TEST_CONFIG.delayBetweenRequests)}
+`);
+
+  // 3️⃣ Execução dos testes
+  console.log(`\n🔍 EXECUTANDO TESTES...\n${textColors.reset}`);
+
   for (const param of TEST_CONFIG.testParams) {
     await Promise.all(TEST_CONFIG.targetUrls.map(async (targetUrl) => {
       await testRedirectParameter(param, targetUrl, false);
@@ -174,24 +279,25 @@ async function runSecurityTests() {
     }));
   }
 
-  // Resultado final no terminal
+  // 4️⃣ Resultados finais
   console.log(`${textColors.green}
-📊 Relatório Final:
-🔄 URLs testadas: ${TEST_RESULTS.testedUrls}
-✅ Redirecionamentos detectados: ${TEST_RESULTS.totalDetected}
-❌ Requisições falhas: ${TEST_RESULTS.failedRequests}${textColors.reset}`);
+📊 RESULTADOS:
+✅ ${TEST_RESULTS.totalDetected} vulnerabilidades
+🔢 ${TEST_RESULTS.testedUrls} URLs testadas
+❌ ${TEST_RESULTS.failedRequests} falhas
+${textColors.reset}`);
 
-  if (TEST_RESULTS.totalDetected === 0) {
-    console.log(`\n${textColors.red}🔴 Nenhuma vulnerabilidade de open redirect encontrada!${textColors.reset}`);
-  }
-
-  // Gera arquivo de relatório
+  // 5️⃣ Gera relatório
   fs.writeFileSync(
     path.join(__dirname, 'report.txt'),
     await generateReport(),
     'utf-8'
   );
-  console.log(`\n${textColors.cyan}📄 Relatório salvo em: ${path.resolve(__dirname, 'report.txt')}${textColors.reset}`);
+  console.log(`${textColors.cyan}📄 Relatório salvo em: ${path.resolve(__dirname, 'report.txt')}${textColors.reset}`);
 }
 
-runSecurityTests();
+// ⚡ Ponto de entrada
+runSecurityTests().catch(error => {
+  console.error(`${textColors.red}⛔ ERRO CRÍTICO: ${error.message}${textColors.reset}`);
+  process.exit(1);
+});
