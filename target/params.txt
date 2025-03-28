@@ -7,4 +7,3 @@ u
 return
 returnTo
 redirect_url
-go
