@@ -144,52 +144,6 @@ function isValidRedirect(redirectUrl, finalUrl) {
 }
 
 /**
- * 🏙 Validador de Open Redirect para domínios Google
- * @async
- * @function isValidGoogleRedirect
- * @param {string} baseUrl - URL base
- * @param {string} redirectUrl - URL de redirecionamento
- * @returns {Promise<boolean>}
- */
-async function isValidGoogleRedirect(baseUrl, redirectUrl) {
-  try {
-    const baseDomain = new URL(baseUrl).hostname.replace('www.', '');
-    let cleanRedirect = decodeURIComponent(redirectUrl)
-      .replace(/^https?:\/\/(www\.)?/, '')
-      .split(/[\/\\?#\s]/)[0]
-      .replace(/[^\w.-]+$/, '');
-
-    const googleDomains = [
-      'google.com', 'google.ad', 'google.ae', 'google.com.af', 'google.com.ag',
-      'google.com.ai', 'google.al', 'google.am', 'google.co.ao', 'google.com.ar',
-      'google.as', 'google.at', 'google.com.au', 'google.az', 'google.ba',
-      'google.com.bd', 'google.be', 'google.bf', 'google.bg', 'google.com.bh',
-      'google.co.zw'
-    ];
-
-    const isGoogle = googleDomains.some(domain =>
-      cleanRedirect === domain || cleanRedirect.endsWith(`.${domain}`)
-    );
-
-    if (!isGoogle) return false;
-
-    const testUrl = redirectUrl.startsWith('http') ? redirectUrl : `http://${redirectUrl}`;
-    const response = await axios.get(testUrl, {
-      timeout: 8000,
-      maxRedirects: 2,
-      validateStatus: null
-    });
-
-    const finalUrl = response.request.res.responseUrl || testUrl;
-    const finalDomain = new URL(finalUrl).hostname.replace('www.', '');
-
-    return googleDomains.some(domain => finalDomain === domain || finalDomain.endsWith(`.${domain}`));
-  } catch {
-    return false;
-  }
-}
-
-/**
  * 🧪 Testa um parâmetro de redirecionamento
  * @async
  * @function testRedirectParameter
@@ -288,7 +242,7 @@ async function runSecurityTests() {
   await loadConfigFromFiles();
   TEST_CONFIG.testParams = await loadWordlist(path.join(__dirname, '../target/params.txt'));
 
-  console.log(`\n🎯 ALVO: ${TEST_CONFIG.baseUrl}\n🌐 DESTINOS: ${TEST_CONFIG.targetUrls.length}\n🛡️ PARÂMETROS: ${TEST_CONFIG.testParams.length}\n`);
+  console.log(`\n🎯 ALVO: ${TEST_CONFIG.baseUrl}\n🌐 PAYLOADS: ${TEST_CONFIG.targetUrls.length}\n🛡️ PARÂMETROS: ${TEST_CONFIG.testParams.length}\n`);
   console.log(`${textColors.cyan}🔍 EXECUTANDO TESTES...\n${textColors.reset}`);
 
   const startTime = Date.now();

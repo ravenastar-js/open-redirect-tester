@@ -9,10 +9,6 @@ set "REPORT_PATH=%ROOT_DIR%src\report.txt"
 :: Navega para a pasta raiz do projeto
 cd /d "%ROOT_DIR%"
 
-echo Testando vulnerabilidades Open Redirect...
-echo Por favor, aguarde...
-echo.
-
 :: Verifica dependências
 where node >nul 2>&1 || (
     echo [ERRO] Node.js não encontrado
